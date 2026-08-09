@@ -5,7 +5,8 @@ const listingImageSchema = new Schema(
   {
     publicId: { type: String, required: true },
     url: { type: String, required: true },
-    thumbUrl: { type: String, required: true },
+    // Null until the thumbnail worker (Phase 3) processes the upload.
+    thumbUrl: { type: String, default: null },
     width: { type: Number, required: true },
     height: { type: Number, required: true },
   },

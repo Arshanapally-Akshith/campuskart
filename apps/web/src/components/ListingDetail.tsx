@@ -5,6 +5,11 @@ import { useAuth } from '../context/AuthContext';
 import { getErrorMessage } from '../lib/apiError';
 import { deleteListing, getListing, publishListing } from '../lib/listingsApi';
 import { ListingForm } from './ListingForm';
+import { ListingImages } from './ListingImages';
+
+function hasPendingThumbnail(listing: Listing | undefined): boolean {
+  return listing?.images.some((image) => image.thumbUrl === null) ?? false;
+}
 
 interface ListingDetailProps {
   listingId: string;
@@ -36,6 +41,9 @@ export function ListingDetail({ listingId, onBack }: ListingDetailProps) {
     queryKey,
     queryFn: () => getListing(listingId),
     retry: false,
+    // Skeleton-until-thumb-arrives: poll while the worker still has an
+    // image pending, stop once every thumbnail has landed.
+    refetchInterval: (query) => (hasPendingThumbnail(query.state.data) ? 1500 : false),
   });
 
   function applyUpdate(updated: Listing): void {
@@ -124,6 +132,14 @@ export function ListingDetail({ listingId, onBack }: ListingDetailProps) {
         {listing.category} · {listing.condition}
       </p>
       <p className="whitespace-pre-wrap text-sm text-slate-700">{listing.description}</p>
+
+      {(listing.images.length > 0 || isOwner) && (
+        <ListingImages
+          listing={listing}
+          isOwner={isOwner && listing.status !== 'REMOVED'}
+          onListingChanged={applyUpdate}
+        />
+      )}
 
       {Object.keys(listing.attributes).length > 0 && (
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-lg border border-slate-200 p-3 text-sm">

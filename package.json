@@ -8,7 +8,7 @@
   },
   "packageManager": "pnpm@11.20.0",
   "scripts": {
-    "dev": "pnpm --filter @campuskart/shared run build && pnpm --parallel --filter \"./apps/*\" run dev",
+    "dev": "pnpm --filter @campuskart/shared run build && concurrently -n api,worker,web -c blue,magenta,green \"pnpm --filter @campuskart/api run dev\" \"pnpm --filter @campuskart/api run worker\" \"pnpm --filter @campuskart/web run dev\"",
     "build": "pnpm -r run build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -21,6 +21,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "concurrently": "^10.0.4",
     "eslint": "^9.39.5",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react": "^7.37.5",

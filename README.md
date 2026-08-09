@@ -23,8 +23,11 @@ cp apps/web/.env.example apps/web/.env
 
 ```bash
 docker compose up -d      # mongo:7, redis:7, mongo-express (localhost:8081)
-pnpm dev                  # api (localhost:4000) + web (localhost:5173)
+pnpm dev                  # api (localhost:4000) + worker + web (localhost:5173)
 ```
+
+`pnpm dev` runs three processes: the HTTP API, the BullMQ worker (thumbnail
+generation + weekly orphaned-asset cleanup), and the Vite dev server.
 
 ## Checks
 
@@ -32,4 +35,19 @@ pnpm dev                  # api (localhost:4000) + web (localhost:5173)
 pnpm lint
 pnpm typecheck
 pnpm build
+pnpm test
 ```
+
+## Seed data
+
+```bash
+pnpm seed   # wipes and refills: 200 users, 5,000 listings
+```
+
+## Image uploads (Phase 3)
+
+Direct browser → Cloudinary upload, signed by the API; a BullMQ worker
+verifies and thumbnails on the way in. Needs real Cloudinary credentials in
+`apps/api/.env` to actually upload — see [docs/PHASE3_NOTES.md](./docs/PHASE3_NOTES.md)
+for setup, what's verified without live credentials, and the orphaned-asset
+cleanup job.

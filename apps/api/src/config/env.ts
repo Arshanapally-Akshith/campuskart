@@ -20,6 +20,9 @@ export const env = {
   mongoUri: required('MONGO_URI'),
   redisUrl: required('REDIS_URL'),
   jwtSecret: required('JWT_SECRET'),
+  cloudinaryCloudName: required('CLOUDINARY_CLOUD_NAME'),
+  cloudinaryApiKey: required('CLOUDINARY_API_KEY'),
+  cloudinaryApiSecret: required('CLOUDINARY_API_SECRET'),
 } as const;
 
 export const isProduction = env.nodeEnv === 'production';

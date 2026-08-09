@@ -139,7 +139,8 @@ export type UpdateListingInput = z.infer<typeof updateListingSchema>;
 export interface ListingImage {
   publicId: string;
   url: string;
-  thumbUrl: string;
+  /** Null until the thumbnail worker (Phase 3) processes the upload. */
+  thumbUrl: string | null;
   width: number;
   height: number;
 }

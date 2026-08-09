@@ -25,6 +25,14 @@ export default defineConfig({
       // mongodb-memory-server directly instead of dialing this URI.
       MONGO_URI: 'mongodb://127.0.0.1:27017/campuskart-test-placeholder',
       MONGOMS_DOWNLOAD_DIR: mongoBinaryCacheDir,
+      // No live Cloudinary account in this environment. Signing is a pure
+      // local computation (see tests/uploads.spec.ts, which recomputes the
+      // expected signature by hand), so a fake secret is fine for that.
+      // Anything that actually talks to Cloudinary (fetch/upload/destroy)
+      // is mocked per test file instead of hitting the network.
+      CLOUDINARY_CLOUD_NAME: 'test-cloud',
+      CLOUDINARY_API_KEY: 'test-api-key',
+      CLOUDINARY_API_SECRET: 'test-api-secret',
     },
   },
 });

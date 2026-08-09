@@ -4,6 +4,7 @@ packages:
 allowBuilds:
   esbuild: true
   mongodb-memory-server: true
+  msgpackr-extract: true
 minimumReleaseAgeExclude:
   - '@types/node@26.2.0'
   - eslint@10.8.1
