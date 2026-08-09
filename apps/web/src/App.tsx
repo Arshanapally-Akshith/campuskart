@@ -16,7 +16,7 @@ export function App() {
     <main className="mx-auto flex min-h-screen max-w-sm flex-col items-center justify-center gap-6 p-6">
       <div className="text-center">
         <h1 className="text-3xl font-bold text-slate-900">CampusKart</h1>
-        <p className="text-slate-600">Phase 1 — authentication.</p>
+        <p className="text-slate-600">Phase 2 — listings.</p>
       </div>
 
       {bootstrapping ? (

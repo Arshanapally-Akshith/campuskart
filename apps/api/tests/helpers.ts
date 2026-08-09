@@ -71,3 +71,39 @@ export async function registerLoggedInUser(
   const session = await login(app, email);
   return { ...session, email };
 }
+
+export function validListingPayload(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    title: 'Trek FX 2 hybrid cycle',
+    description: 'Barely used hybrid cycle, well maintained, ideal for campus commuting daily.',
+    category: 'CYCLE',
+    attributes: { gearCount: 21, brand: 'Trek' },
+    priceInPaise: 1_500_000,
+    condition: 'GOOD',
+    ...overrides,
+  };
+}
+
+export interface CreatedListing {
+  id: string;
+  status: string;
+  sellerId: string;
+  priceInPaise: number;
+  version: number;
+  [key: string]: unknown;
+}
+
+export async function createListing(
+  app: Express,
+  accessToken: string,
+  overrides: Record<string, unknown> = {},
+): Promise<CreatedListing> {
+  const res = await request(app)
+    .post('/api/listings')
+    .set('Authorization', `Bearer ${accessToken}`)
+    .send(validListingPayload(overrides))
+    .expect(201);
+  return res.body as CreatedListing;
+}

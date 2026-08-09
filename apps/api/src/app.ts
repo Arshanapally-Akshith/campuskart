@@ -9,6 +9,7 @@ import { logger } from './lib/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { authRouter } from './routes/auth.js';
 import { healthRouter } from './routes/health.js';
+import { listingsRouter } from './routes/listings.js';
 
 export function createApp(): Express {
   const app = express();
@@ -37,6 +38,7 @@ export function createApp(): Express {
 
   app.use(healthRouter);
   app.use('/api/auth', authRouter);
+  app.use('/api/listings', listingsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
