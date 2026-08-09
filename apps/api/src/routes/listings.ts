@@ -16,6 +16,7 @@ import {
   type FeedResponse,
   type Listing as ListingDto,
   type ListingDetailResponse,
+  type ListingSummary,
   type ReportResponse,
 } from '@campuskart/shared';
 import { Router, type Router as RouterType } from 'express';
@@ -50,6 +51,68 @@ function toPublicListing(doc: ListingDocument): ListingDto {
     description: doc.description,
     category: doc.category,
     attributes: doc.attributes as Record<string, string | number>,
+    priceInPaise: doc.priceInPaise,
+    condition: doc.condition,
+    images: doc.images.map((img) => ({
+      publicId: img.publicId,
+      url: img.url,
+      thumbUrl: img.thumbUrl ?? null,
+      width: img.width,
+      height: img.height,
+    })),
+    status: doc.status,
+    reservedBy: doc.reservedBy ? doc.reservedBy.toString() : null,
+    reservedAt: doc.reservedAt ? doc.reservedAt.toISOString() : null,
+    reservationExpiresAt: doc.reservationExpiresAt ? doc.reservationExpiresAt.toISOString() : null,
+    soldTo: doc.soldTo ? doc.soldTo.toString() : null,
+    soldAt: doc.soldAt ? doc.soldAt.toISOString() : null,
+    version: doc.version,
+    reportCount: doc.reportCount,
+    createdAt: doc.createdAt.toISOString(),
+    updatedAt: doc.updatedAt.toISOString(),
+  };
+}
+
+// BUILD.md Phase 9: the shape `GET /api/listings` (browse and search) is
+// queried and mapped to, once `.select('-description -attributes')` is
+// applied — see the `ListingSummary` doc comment in packages/shared for the
+// measurement that motivated it. `.lean()` alongside it means these are
+// plain objects, not hydrated Mongoose documents (skips change-tracking/
+// getter overhead across every row of every feed page) — `_id` is still a
+// real ObjectId and date fields are still real Dates, so the field access
+// below is unaffected either way.
+interface LeanListingSummaryDoc {
+  _id: Types.ObjectId;
+  sellerId: Types.ObjectId;
+  title: string;
+  category: ListingDto['category'];
+  priceInPaise: number;
+  condition: ListingDto['condition'];
+  images: {
+    publicId: string;
+    url: string;
+    thumbUrl?: string | null;
+    width: number;
+    height: number;
+  }[];
+  status: ListingDto['status'];
+  reservedBy?: Types.ObjectId | null;
+  reservedAt?: Date | null;
+  reservationExpiresAt?: Date | null;
+  soldTo?: Types.ObjectId | null;
+  soldAt?: Date | null;
+  version: number;
+  reportCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+function toListingSummary(doc: LeanListingSummaryDoc): ListingSummary {
+  return {
+    id: doc._id.toString(),
+    sellerId: doc.sellerId.toString(),
+    title: doc.title,
+    category: doc.category,
     priceInPaise: doc.priceInPaise,
     condition: doc.condition,
     images: doc.images.map((img) => ({
@@ -120,16 +183,21 @@ listingsRouter.get(
       const skip = (page - 1) * FEED_PAGE_SIZE;
 
       const searchFilter = { ...baseFilter, $text: { $search: query.q } };
-      const docs = await Listing.find(searchFilter, { score: { $meta: 'textScore' } })
+      const docs = await Listing.find(searchFilter, {
+        score: { $meta: 'textScore' },
+        description: 0,
+        attributes: 0,
+      })
         .sort({ score: { $meta: 'textScore' } })
         .skip(skip)
-        .limit(FEED_PAGE_SIZE + 1);
+        .limit(FEED_PAGE_SIZE + 1)
+        .lean();
 
       const hasMore = docs.length > FEED_PAGE_SIZE && page < SEARCH_MAX_PAGES;
       const pageDocs = docs.slice(0, FEED_PAGE_SIZE);
 
       const body: FeedResponse = {
-        listings: pageDocs.map(toPublicListing),
+        listings: pageDocs.map(toListingSummary),
         hasMore,
         nextCursor: null,
         page,
@@ -172,8 +240,10 @@ listingsRouter.get(
     }
 
     const docs = await Listing.find(mongoFilter)
+      .select('-description -attributes')
       .sort({ createdAt: -1, _id: -1 })
-      .limit(FEED_PAGE_SIZE + 1);
+      .limit(FEED_PAGE_SIZE + 1)
+      .lean();
 
     const hasMore = docs.length > FEED_PAGE_SIZE;
     const pageDocs = docs.slice(0, FEED_PAGE_SIZE);
@@ -181,7 +251,7 @@ listingsRouter.get(
     const nextCursor = hasMore && last ? encodeCursor(last.createdAt, last._id.toString()) : null;
 
     const body: FeedResponse = {
-      listings: pageDocs.map(toPublicListing),
+      listings: pageDocs.map(toListingSummary),
       hasMore,
       nextCursor,
     };

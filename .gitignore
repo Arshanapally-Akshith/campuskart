@@ -27,5 +27,10 @@ Thumbs.db
 # test / coverage
 coverage/
 
+# k6 load-test fixtures (JWTs) and result dumps — regenerate via
+# `pnpm --filter @campuskart/api run seed:load`, see docs/PERFORMANCE.md
+k6/fixtures.json
+k6/results/
+
 # vite
 .vite/

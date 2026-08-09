@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { CATEGORIES, CONDITIONS } from './listings.js';
-import type { Listing } from './listings.js';
+import type { ListingSummary } from './listings.js';
 
 export const FEED_PAGE_SIZE = 20;
 
@@ -27,7 +27,7 @@ export const listFeedQuerySchema = z.object({
 export type ListFeedQuery = z.infer<typeof listFeedQuerySchema>;
 
 export interface FeedResponse {
-  listings: Listing[];
+  listings: ListingSummary[];
   hasMore: boolean;
   /** Browse mode only (cursor pagination); null in search mode. */
   nextCursor: string | null;

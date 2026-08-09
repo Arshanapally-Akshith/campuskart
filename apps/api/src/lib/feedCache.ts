@@ -53,6 +53,20 @@ function cacheKey(version: string, filterHash: string, slot: 'p1' | 'p2'): strin
   return `feed:${NAMESPACE}v${version}:${filterHash}:${slot}`;
 }
 
+// BUILD.md Phase 9: "Measure feed cache hit rate on/off." Plain Redis
+// counters, read back by scripts/cacheStats.ts — cheap enough to leave
+// permanently on rather than special-casing a load-test mode, and the
+// namespace above already keeps a test run's counts from mixing with a
+// dev/load-test run's.
+const HITS_KEY = `feed:${NAMESPACE}cache:hits`;
+const MISSES_KEY = `feed:${NAMESPACE}cache:misses`;
+
+// BUILD.md Phase 9: "Measure feed cache hit rate on/off" — an operational
+// toggle for exactly that A/B run, not a normal runtime code path. Off in
+// every environment unless explicitly set; see docs/PERFORMANCE.md for the
+// on/off comparison this produced.
+const CACHE_DISABLED = process.env['FEED_CACHE_DISABLED'] === 'true';
+
 /**
  * Only the first two pages of the browse feed are cacheable (ARCHITECTURE.md
  * §6). Page 1 is unambiguous (no cursor). A cursor-bearing request is only
@@ -65,20 +79,50 @@ export async function getCachedFeedPage(
   filters: FeedFilterKey,
   cursor: string | null,
 ): Promise<FeedResponse | null> {
+  if (CACHE_DISABLED) {
+    await redis.incr(MISSES_KEY);
+    return null;
+  }
   const version = await getVersion();
   const filterHash = hashFilters(filters);
 
   const page1Raw = await redis.get(cacheKey(version, filterHash, 'p1'));
   if (cursor === null) {
+    await redis.incr(page1Raw ? HITS_KEY : MISSES_KEY);
     return page1Raw ? (JSON.parse(page1Raw) as FeedResponse) : null;
   }
 
-  if (!page1Raw) return null;
+  if (!page1Raw) {
+    await redis.incr(MISSES_KEY);
+    return null;
+  }
   const page1 = JSON.parse(page1Raw) as FeedResponse;
-  if (page1.nextCursor !== cursor) return null;
+  if (page1.nextCursor !== cursor) {
+    await redis.incr(MISSES_KEY);
+    return null;
+  }
 
   const page2Raw = await redis.get(cacheKey(version, filterHash, 'p2'));
+  await redis.incr(page2Raw ? HITS_KEY : MISSES_KEY);
   return page2Raw ? (JSON.parse(page2Raw) as FeedResponse) : null;
+}
+
+export interface FeedCacheStats {
+  hits: number;
+  misses: number;
+  hitRate: number;
+}
+
+export async function getFeedCacheStats(): Promise<FeedCacheStats> {
+  const [hitsRaw, missesRaw] = await redis.mget(HITS_KEY, MISSES_KEY);
+  const hits = Number(hitsRaw ?? 0);
+  const misses = Number(missesRaw ?? 0);
+  const total = hits + misses;
+  return { hits, misses, hitRate: total === 0 ? 0 : hits / total };
+}
+
+export async function resetFeedCacheStats(): Promise<void> {
+  await redis.del(HITS_KEY, MISSES_KEY);
 }
 
 export async function setCachedFeedPage(
@@ -86,6 +130,7 @@ export async function setCachedFeedPage(
   cursor: string | null,
   response: FeedResponse,
 ): Promise<void> {
+  if (CACHE_DISABLED) return;
   const version = await getVersion();
   const filterHash = hashFilters(filters);
 

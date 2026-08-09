@@ -8,7 +8,17 @@ import eslintConfigPrettier from 'eslint-config-prettier';
 
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', '**/build/**', '**/coverage/**', '**/node_modules/**', '**/*.d.ts'],
+    // k6/**: k6 load-test scripts run in k6's own Goja JS runtime (globals
+    // like __VU, __ENV, open() — see docs/PERFORMANCE.md), not Node/TS —
+    // no tsconfig project covers them and none should.
+    ignores: [
+      '**/dist/**',
+      '**/build/**',
+      '**/coverage/**',
+      '**/node_modules/**',
+      '**/*.d.ts',
+      'k6/**',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,

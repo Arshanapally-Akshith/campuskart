@@ -168,6 +168,18 @@ export interface Listing {
 }
 
 /**
+ * BUILD.md Phase 9: the feed never renders `description` or `attributes`
+ * (apps/web/src/pages/FeedPage.tsx's ListingCard shows title/price/
+ * category/condition/thumbnail only) — a 20k-response k6 run measured
+ * ~16.7KB/response with the full `Listing` shape, most of it description
+ * text nobody on the list view ever sees. `GET /api/listings` (both browse
+ * and search) returns this narrower shape; `GET /api/listings/:id` still
+ * returns the full `Listing` (via `ListingDetailResponse`), where the
+ * detail page *does* render both fields.
+ */
+export type ListingSummary = Omit<Listing, 'description' | 'attributes'>;
+
+/**
  * GET /api/listings/:id only. `sellerPhone` is never present on feed cards —
  * it's per-viewer (ARCHITECTURE.md §9 "Phone privacy") and would poison the
  * feed's shared Redis cache if it leaked in there, so it's a distinct

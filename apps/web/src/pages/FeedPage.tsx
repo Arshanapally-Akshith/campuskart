@@ -4,7 +4,7 @@ import {
   formatPaise,
   type Category,
   type Condition,
-  type Listing,
+  type ListingSummary,
 } from '@campuskart/shared';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -60,7 +60,7 @@ function SearchBox({ initialValue, onCommit }: SearchBoxProps) {
   );
 }
 
-function ListingCard({ listing }: { listing: Listing }) {
+function ListingCard({ listing }: { listing: ListingSummary }) {
   const thumb = listing.images[0]?.thumbUrl ?? null;
   return (
     <Link

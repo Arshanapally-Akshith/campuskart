@@ -6,6 +6,7 @@ import {
 } from '@campuskart/shared';
 import { Types } from 'mongoose';
 import { AppError } from '../middleware/errorHandler.js';
+import { logger } from './logger.js';
 import { isDuplicateKeyError } from './mongoErrors.js';
 import { Conversation, type ConversationDocument } from '../models/Conversation.js';
 import { Listing } from '../models/Listing.js';
@@ -179,7 +180,15 @@ export async function sendMessage(
     // up to the message they just sent, so their own unread count must not
     // count it. Without this a sender would see their own outgoing
     // messages inflate their unread badge.
-    await markRead(conversationId, senderId, seq);
+    //
+    // BUILD.md Phase 9: fire-and-forget, not awaited — a k6 chat-throughput
+    // run at 50 concurrent conversations showed p95 round-trip latency
+    // growing with concurrency, traced to this being a 3rd sequential DB
+    // round trip in the send critical path (after the seq-allocating
+    // Conversation update and the Message insert). The client's ack
+    // doesn't depend on the sender's own read-pointer bookkeeping having
+    // already landed, so it doesn't need to block the response.
+    markMessageAsReadFireAndForget(conversationId, senderId, seq);
     return {
       seq: message.seq,
       id: message._id.toString(),
@@ -194,7 +203,7 @@ export async function sendMessage(
       // every retry of the same clientMsgId converges on one row.
       const existing = await Message.findOne({ conversationId, clientMsgId });
       if (existing) {
-        await markRead(conversationId, senderId, existing.seq);
+        markMessageAsReadFireAndForget(conversationId, senderId, existing.seq);
         return {
           seq: existing.seq,
           id: existing._id.toString(),
@@ -205,6 +214,12 @@ export async function sendMessage(
     }
     throw err;
   }
+}
+
+function markMessageAsReadFireAndForget(conversationId: string, userId: string, seq: number): void {
+  markRead(conversationId, userId, seq).catch((err: unknown) => {
+    logger.warn({ err, conversationId, userId, seq }, 'Failed to mark own message as read');
+  });
 }
 
 export async function getMessagesSince(
