@@ -107,3 +107,16 @@ export async function createListing(
     .expect(201);
   return res.body as CreatedListing;
 }
+
+export async function createActiveListing(
+  app: Express,
+  accessToken: string,
+  overrides: Record<string, unknown> = {},
+): Promise<CreatedListing> {
+  const draft = await createListing(app, accessToken, overrides);
+  const res = await request(app)
+    .post(`/api/listings/${draft.id}/publish`)
+    .set('Authorization', `Bearer ${accessToken}`)
+    .expect(200);
+  return res.body as CreatedListing;
+}

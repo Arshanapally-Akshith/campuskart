@@ -1,4 +1,4 @@
-import { formatPaise, type Listing } from '@campuskart/shared';
+import { formatPaise, type Listing, type ListingDetailResponse } from '@campuskart/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
@@ -6,8 +6,9 @@ import { getErrorMessage } from '../lib/apiError';
 import { deleteListing, getListing, publishListing } from '../lib/listingsApi';
 import { ListingForm } from './ListingForm';
 import { ListingImages } from './ListingImages';
+import { ReservationPanel } from './ReservationPanel';
 
-function hasPendingThumbnail(listing: Listing | undefined): boolean {
+function hasPendingThumbnail(listing: ListingDetailResponse | undefined): boolean {
   return listing?.images.some((image) => image.thumbUrl === null) ?? false;
 }
 
@@ -37,6 +38,7 @@ export function ListingDetail({ listingId, onBack }: ListingDetailProps) {
     isPending,
     isError,
     error,
+    refetch,
   } = useQuery({
     queryKey,
     queryFn: () => getListing(listingId),
@@ -46,8 +48,14 @@ export function ListingDetail({ listingId, onBack }: ListingDetailProps) {
     refetchInterval: (query) => (hasPendingThumbnail(query.state.data) ? 1500 : false),
   });
 
+  // publish/delete return the plain `Listing` shape (no `sellerPhone` — it's
+  // per-viewer and only GET /:id computes it), so a local update after those
+  // actions carries the previous value forward rather than clobbering it.
   function applyUpdate(updated: Listing): void {
-    queryClient.setQueryData(queryKey, updated);
+    queryClient.setQueryData<ListingDetailResponse>(queryKey, (prev) => ({
+      ...updated,
+      sellerPhone: prev?.sellerPhone ?? null,
+    }));
   }
 
   async function handlePublish(): Promise<void> {
@@ -151,6 +159,17 @@ export function ListingDetail({ listingId, onBack }: ListingDetailProps) {
           ))}
         </dl>
       )}
+
+      {user &&
+        (listing.status === 'ACTIVE' ||
+          listing.status === 'RESERVED' ||
+          listing.status === 'SOLD') && (
+          <ReservationPanel
+            listing={listing}
+            currentUserId={user.id}
+            onRefresh={() => void refetch()}
+          />
+        )}
 
       {isOwner && listing.status !== 'REMOVED' && (
         <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-3">

@@ -1,6 +1,7 @@
 import {
   attachImageRequestSchema,
   attributesSchemaByCategory,
+  confirmSaleRequestSchema,
   createListingSchema,
   ErrorCode,
   FEED_PAGE_SIZE,
@@ -8,10 +9,12 @@ import {
   MAX_IMAGES_PER_LISTING,
   removeImageRequestSchema,
   reorderImagesRequestSchema,
+  RESERVATION_TTL_MS,
   SEARCH_MAX_PAGES,
   updateListingSchema,
   type FeedResponse,
   type Listing as ListingDto,
+  type ListingDetailResponse,
 } from '@campuskart/shared';
 import { Router, type Router as RouterType } from 'express';
 import { Types } from 'mongoose';
@@ -25,6 +28,7 @@ import { AppError } from '../middleware/errorHandler.js';
 import { optionalAuth } from '../middleware/optionalAuth.js';
 import { getAuthUser, requireAuth } from '../middleware/requireAuth.js';
 import { Listing, type ListingDocument } from '../models/Listing.js';
+import { User } from '../models/User.js';
 
 export const listingsRouter: RouterType = Router();
 
@@ -60,6 +64,20 @@ function toPublicListing(doc: ListingDocument): ListingDto {
 
 function isOwner(doc: ListingDocument, actorId: string): boolean {
   return doc.sellerId.toString() === actorId;
+}
+
+/** ARCHITECTURE.md §9 "Phone privacy": revealed to the seller (their own
+ * number) and to the buyer of a currently-active, unexpired reservation —
+ * nobody else. */
+function sellerPhoneVisibleTo(doc: ListingDocument, viewerId: string): boolean {
+  if (isOwner(doc, viewerId)) return true;
+  return (
+    doc.status === 'RESERVED' &&
+    doc.reservedBy?.toString() === viewerId &&
+    doc.reservationExpiresAt !== null &&
+    doc.reservationExpiresAt !== undefined &&
+    doc.reservationExpiresAt.getTime() > Date.now()
+  );
 }
 
 listingsRouter.get(
@@ -212,6 +230,164 @@ listingsRouter.post(
   }),
 );
 
+listingsRouter.post(
+  '/:id/reserve',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const { sub: buyerId } = getAuthUser(req);
+    const { id } = req.params;
+
+    // Fast-path 404 only — existence, not status. The guard that actually
+    // decides who wins a race lives entirely in the atomic update below
+    // (BUILD.md Phase 5, "Watch": a convenience check is not authorisation).
+    const existing = await Listing.findById(id).select('_id');
+    if (!existing) {
+      throw new AppError(404, ErrorCode.NOT_FOUND, 'Listing not found');
+    }
+
+    const now = new Date();
+    // ARCHITECTURE.md §4: single atomic conditional update. The filter and
+    // the write happen as one document-level operation — no window between
+    // "check" and "set" for a second request to slip through. The `$or`
+    // clause is lazy expiry: a stale RESERVED reservation is as good as
+    // ACTIVE, so an expired reservation is claimable without the sweeper
+    // ever having to run.
+    const reserved = await Listing.findOneAndUpdate(
+      {
+        _id: id,
+        sellerId: { $ne: buyerId },
+        $or: [{ status: 'ACTIVE' }, { status: 'RESERVED', reservationExpiresAt: { $lt: now } }],
+      },
+      {
+        $set: {
+          status: 'RESERVED',
+          reservedBy: buyerId,
+          reservedAt: now,
+          reservationExpiresAt: new Date(now.getTime() + RESERVATION_TTL_MS),
+        },
+        $inc: { version: 1 },
+      },
+      { new: true },
+    );
+    if (!reserved) {
+      throw new AppError(
+        409,
+        ErrorCode.LISTING_UNAVAILABLE,
+        'This listing is no longer available to reserve',
+      );
+    }
+    await bumpFeedVersion(); // now RESERVED — must disappear from the ACTIVE-only feed
+
+    res.status(200).json(toPublicListing(reserved));
+  }),
+);
+
+listingsRouter.post(
+  '/:id/cancel',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const { sub: actorId } = getAuthUser(req);
+    const { id } = req.params;
+
+    const existing = await Listing.findById(id);
+    if (!existing) {
+      throw new AppError(404, ErrorCode.NOT_FOUND, 'Listing not found');
+    }
+    // Fast-path 403 for a clear non-party; the atomic filter below still
+    // carries the full buyer-or-seller check as the actual authorisation.
+    const isParty = isOwner(existing, actorId) || existing.reservedBy?.toString() === actorId;
+    if (!isParty) {
+      throw new AppError(403, ErrorCode.FORBIDDEN, 'You are not a party to this reservation');
+    }
+
+    // Either party may cancel — the guard is the full authorisation check,
+    // not just a fast path: it requires RESERVED *and* the actor to be the
+    // buyer or the seller, all in one atomic filter.
+    const cancelled = await Listing.findOneAndUpdate(
+      {
+        _id: id,
+        status: 'RESERVED',
+        $or: [{ reservedBy: actorId }, { sellerId: actorId }],
+      },
+      {
+        $set: {
+          status: 'ACTIVE',
+          reservedBy: null,
+          reservedAt: null,
+          reservationExpiresAt: null,
+        },
+        $inc: { version: 1 },
+      },
+      { new: true },
+    );
+    if (!cancelled) {
+      throw new AppError(
+        409,
+        ErrorCode.CONFLICT,
+        'Listing is not reserved, or you are not a party to the reservation',
+      );
+    }
+    await bumpFeedVersion(); // back to ACTIVE — reappears in the feed
+
+    res.status(200).json(toPublicListing(cancelled));
+  }),
+);
+
+listingsRouter.post(
+  '/:id/confirm-sale',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const { sub: actorId } = getAuthUser(req);
+    const { id } = req.params;
+    const { buyerId } = confirmSaleRequestSchema.parse(req.body);
+
+    const existing = await Listing.findById(id);
+    if (!existing) {
+      throw new AppError(404, ErrorCode.NOT_FOUND, 'Listing not found');
+    }
+    if (!isOwner(existing, actorId)) {
+      throw new AppError(403, ErrorCode.FORBIDDEN, 'Only the seller can confirm a sale');
+    }
+
+    const now = new Date();
+    // ARCHITECTURE.md §4 confirm-sale guard: seller only, and the
+    // reservation must still be held by the exact buyer named in the
+    // request and not yet expired — an unexpired-at-request-time buyer who
+    // let the clock run out while the seller was clicking "confirm" cannot
+    // be sold to.
+    const sold = await Listing.findOneAndUpdate(
+      {
+        _id: id,
+        status: 'RESERVED',
+        sellerId: actorId,
+        reservedBy: buyerId,
+        reservationExpiresAt: { $gt: now },
+      },
+      {
+        $set: {
+          status: 'SOLD',
+          soldTo: buyerId,
+          soldAt: now,
+          reservedBy: null,
+          reservedAt: null,
+          reservationExpiresAt: null,
+        },
+        $inc: { version: 1 },
+      },
+      { new: true },
+    );
+    if (!sold) {
+      throw new AppError(
+        409,
+        ErrorCode.CONFLICT,
+        'Listing is not in a reserved-by-this-buyer, unexpired state',
+      );
+    }
+
+    res.status(200).json(toPublicListing(sold));
+  }),
+);
+
 listingsRouter.get(
   '/:id',
   optionalAuth,
@@ -229,7 +405,14 @@ listingsRouter.get(
       throw new AppError(404, ErrorCode.NOT_FOUND, 'Listing not found');
     }
 
-    res.status(200).json(toPublicListing(listing));
+    let sellerPhone: string | null = null;
+    if (req.user !== undefined && sellerPhoneVisibleTo(listing, req.user.sub)) {
+      const seller = await User.findById(listing.sellerId).select('phone');
+      sellerPhone = seller?.phone ?? null;
+    }
+
+    const body: ListingDetailResponse = { ...toPublicListing(listing), sellerPhone };
+    res.status(200).json(body);
   }),
 );
 

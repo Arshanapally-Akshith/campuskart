@@ -4,6 +4,7 @@ import type {
   CreateListingInput,
   FeedResponse,
   Listing,
+  ListingDetailResponse,
   UpdateListingInput,
 } from '@campuskart/shared';
 import { http } from './http';
@@ -29,8 +30,8 @@ export async function createListing(input: CreateListingInput): Promise<Listing>
   return res.data;
 }
 
-export async function getListing(id: string): Promise<Listing> {
-  const res = await http.get<Listing>(`/api/listings/${id}`);
+export async function getListing(id: string): Promise<ListingDetailResponse> {
+  const res = await http.get<ListingDetailResponse>(`/api/listings/${id}`);
   return res.data;
 }
 
@@ -46,5 +47,20 @@ export async function publishListing(id: string): Promise<Listing> {
 
 export async function deleteListing(id: string): Promise<Listing> {
   const res = await http.delete<Listing>(`/api/listings/${id}`);
+  return res.data;
+}
+
+export async function reserveListing(id: string): Promise<Listing> {
+  const res = await http.post<Listing>(`/api/listings/${id}/reserve`);
+  return res.data;
+}
+
+export async function cancelReservation(id: string): Promise<Listing> {
+  const res = await http.post<Listing>(`/api/listings/${id}/cancel`);
+  return res.data;
+}
+
+export async function confirmSale(id: string, buyerId: string): Promise<Listing> {
+  const res = await http.post<Listing>(`/api/listings/${id}/confirm-sale`, { buyerId });
   return res.data;
 }

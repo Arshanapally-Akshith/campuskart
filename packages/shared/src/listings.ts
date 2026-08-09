@@ -168,6 +168,18 @@ export interface Listing {
 }
 
 /**
+ * GET /api/listings/:id only. `sellerPhone` is never present on feed cards —
+ * it's per-viewer (ARCHITECTURE.md §9 "Phone privacy") and would poison the
+ * feed's shared Redis cache if it leaked in there, so it's a distinct
+ * response shape rather than a field on the base `Listing`.
+ */
+export interface ListingDetailResponse extends Listing {
+  /** Non-null only when the viewer is the seller, or the buyer of an active
+   * (unexpired) reservation on this listing. */
+  sellerPhone: string | null;
+}
+
+/**
  * The one place a price becomes a rupee string. Everything else — storage,
  * API payloads, form state — stays integer paise. ₹1,299.50 stored as
  * 129950.
