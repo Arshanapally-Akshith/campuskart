@@ -6,6 +6,7 @@ import { signAccessToken } from '../lib/jwt.js';
 import { sendOtpEmail } from '../lib/mailer.js';
 import { generateOtp, storeOtp, verifyOtp as verifyStoredOtp } from '../lib/otp.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
+import { loginRateLimiter, otpRateLimiter, rateLimitMiddleware } from '../lib/rateLimit.js';
 import {
   generateFamilyId,
   generateOpaqueToken,
@@ -81,8 +82,18 @@ function getDummyHash(): Promise<string> {
   return dummyHashPromise;
 }
 
+function normalizedEmailKey(req: Request): string {
+  const body = req.body as Record<string, unknown> | undefined;
+  const email = body?.['email'];
+  return typeof email === 'string' ? email.trim().toLowerCase() : 'unknown';
+}
+
 authRouter.post(
   '/signup',
+  // BUILD.md Phase 7: OTP 3/hour/email — signup is the only place an OTP is
+  // sent (BUILD.md Phase 1 has no separate "resend" endpoint), so the limit
+  // belongs here.
+  rateLimitMiddleware(otpRateLimiter, normalizedEmailKey),
   asyncHandler(async (req, res) => {
     const email = requireString(req.body, 'email').trim().toLowerCase();
     const password = requireString(req.body, 'password');
@@ -150,6 +161,9 @@ authRouter.post(
 
 authRouter.post(
   '/login',
+  // BUILD.md Phase 7: login 5/15min/IP. Keyed on `req.ip`, which resolves
+  // via the `trust proxy` setting in app.ts.
+  rateLimitMiddleware(loginRateLimiter, (req) => req.ip ?? 'unknown'),
   asyncHandler(async (req, res) => {
     const email = requireString(req.body, 'email').trim().toLowerCase();
     const password = requireString(req.body, 'password');

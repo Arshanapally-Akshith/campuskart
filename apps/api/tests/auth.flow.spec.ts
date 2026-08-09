@@ -1,7 +1,15 @@
 import type { ErrorPayload, LoginResponse, MeResponse, RefreshResponse } from '@campuskart/shared';
+import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
-import { buildApp, login, signupAndVerify, TEST_PASSWORD, uniqueEmail } from './helpers.js';
+import {
+  buildApp,
+  login,
+  randomTestIp,
+  signupAndVerify,
+  TEST_PASSWORD,
+  uniqueEmail,
+} from './helpers.js';
 import { sentOtps } from './mailerSpy.js';
 
 function errorOf(res: request.Response): ErrorPayload['error'] {
@@ -11,9 +19,18 @@ function errorOf(res: request.Response): ErrorPayload['error'] {
 describe('auth flow', () => {
   it('rejects signup for a non-NITW email', async () => {
     const app = buildApp();
+    // A fresh email per run, not a fixed literal: BUILD.md Phase 7's OTP
+    // rate limiter (3/hour/email) is keyed on the email in the request body
+    // regardless of whether the handler later rejects it as invalid, so a
+    // hardcoded address here would eventually start getting 429 instead of
+    // 400 across repeated suite runs against the same real Redis instance.
     const res = await request(app)
       .post('/api/auth/signup')
-      .send({ email: 'someone@gmail.com', password: TEST_PASSWORD, name: 'Someone' })
+      .send({
+        email: `someone-${randomUUID()}@gmail.com`,
+        password: TEST_PASSWORD,
+        name: 'Someone',
+      })
       .expect(400);
 
     expect(errorOf(res).code).toBe('BAD_REQUEST');
@@ -91,6 +108,7 @@ describe('auth flow', () => {
 
     const res = await request(app)
       .post('/api/auth/login')
+      .set('X-Forwarded-For', randomTestIp())
       .send({ email, password: TEST_PASSWORD })
       .expect(403);
     expect(errorOf(res).code).toBe('EMAIL_NOT_VERIFIED');
@@ -103,6 +121,7 @@ describe('auth flow', () => {
 
     const res = await request(app)
       .post('/api/auth/login')
+      .set('X-Forwarded-For', randomTestIp())
       .send({ email, password: 'totally-wrong-password' })
       .expect(401);
     expect(errorOf(res).code).toBe('UNAUTHORIZED');
@@ -115,6 +134,7 @@ describe('auth flow', () => {
 
     const res = await request(app)
       .post('/api/auth/login')
+      .set('X-Forwarded-For', randomTestIp())
       .send({ email, password: TEST_PASSWORD })
       .expect(200);
 

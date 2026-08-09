@@ -6,21 +6,13 @@ import {
 } from '@campuskart/shared';
 import { Types } from 'mongoose';
 import { AppError } from '../middleware/errorHandler.js';
+import { isDuplicateKeyError } from './mongoErrors.js';
 import { Conversation, type ConversationDocument } from '../models/Conversation.js';
 import { Listing } from '../models/Listing.js';
 import { Message, type MessageDocument } from '../models/Message.js';
 
 export function conversationRoom(conversationId: string): string {
   return `conversation:${conversationId}`;
-}
-
-function isDuplicateKeyError(err: unknown): boolean {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'code' in err &&
-    (err as { code?: unknown }).code === 11000
-  );
 }
 
 export function toMessageDto(doc: MessageDocument): MessageDto {

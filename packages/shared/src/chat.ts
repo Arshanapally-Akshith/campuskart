@@ -105,6 +105,9 @@ export interface SocketErrorAck {
   ok: false;
   code: string;
   message: string;
+  /** Present only for code === 'RATE_LIMITED' (BUILD.md Phase 7: messages
+   * 30/min/user) — the socket equivalent of a REST 429's Retry-After. */
+  retryAfterSeconds?: number;
 }
 
 /** Socket.IO event names — kept as constants so client and server can never

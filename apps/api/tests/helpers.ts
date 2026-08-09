@@ -19,6 +19,21 @@ export function uniqueEmail(): string {
   return `test.user.${randomUUID()}@student.nitw.ac.in`;
 }
 
+function randomOctet(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+// BUILD.md Phase 7: login is rate-limited 5/15min/IP, and app.ts trusts one
+// proxy hop so `req.ip` resolves from X-Forwarded-For. Redis-backed rate
+// limit state is real and shared across the whole suite run (same reason
+// uniqueEmail exists), so every call that should be treated as "a
+// different client" needs its own fake IP, or unrelated tests would trip
+// each other's bucket. Only the dedicated rate-limit test intentionally
+// reuses one IP across repeated calls.
+export function randomTestIp(): string {
+  return `10.${String(randomOctet(0, 254))}.${String(randomOctet(0, 254))}.${String(randomOctet(1, 254))}`;
+}
+
 export async function signupAndVerify(
   app: Express,
   email: string,
@@ -42,9 +57,14 @@ export interface LoggedInSession {
   refreshCookie: string;
 }
 
-export async function login(app: Express, email: string): Promise<LoggedInSession> {
+export async function login(
+  app: Express,
+  email: string,
+  ip: string = randomTestIp(),
+): Promise<LoggedInSession> {
   const res = await request(app)
     .post('/api/auth/login')
+    .set('X-Forwarded-For', ip)
     .send({ email, password: TEST_PASSWORD })
     .expect(200);
 

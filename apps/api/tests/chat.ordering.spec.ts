@@ -6,6 +6,7 @@ import type { Socket as ClientSocket } from 'socket.io-client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { connectSocket, startChatServer, type RunningChatServer } from './chatHelpers.js';
 import { buildApp, createActiveListing, registerLoggedInUser } from './helpers.js';
+import { sendMessage } from '../src/lib/chatService.js';
 
 const openServers: RunningChatServer[] = [];
 const openSockets: ClientSocket[] = [];
@@ -101,17 +102,24 @@ describe('message ordering', () => {
       .expect(200);
     const conversationId = (convRes.body as { id: string }).id;
 
+    const buyerMe = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${buyer.accessToken}`)
+      .expect(200);
+    const buyerId = (buyerMe.body as { user: { id: string } }).user.id;
+
     const buyerSocket = await connectSocket(server.url, buyer.accessToken);
     openSockets.push(buyerSocket);
     await buyerSocket.emitWithAck(SocketEvent.SYNC, { conversationId, lastSeq: 0 });
 
+    // Seeded directly through the chat service, not `message:send` — this
+    // test is about `sync`'s SYNC_PAGE_CAP/hasMore behaviour, and routing
+    // 205 sends through the socket would also trip the unrelated
+    // BUILD.md Phase 7 messages-30/min/user limiter, which is exercised on
+    // its own terms in rateLimit.spec.ts.
     const total = 205; // > SYNC_PAGE_CAP (200)
     for (let i = 0; i < total; i += 1) {
-      await buyerSocket.emitWithAck(SocketEvent.MESSAGE_SEND, {
-        conversationId,
-        clientMsgId: randomUUID(),
-        body: `msg ${String(i)}`,
-      });
+      await sendMessage(conversationId, buyerId, randomUUID(), `msg ${String(i)}`);
     }
 
     const sync = (await buyerSocket.emitWithAck(SocketEvent.SYNC, {

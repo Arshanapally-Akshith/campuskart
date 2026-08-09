@@ -21,6 +21,7 @@ import { env } from '../config/env.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { verifyAccessToken } from './jwt.js';
 import { logger } from './logger.js';
+import { checkRateLimit, messageRateLimiter } from './rateLimit.js';
 import {
   assertParticipant,
   conversationRoom,
@@ -118,6 +119,20 @@ function registerHandlers(io: ChatSocketServer, socket: ChatSocket): void {
   socket.on(SocketEvent.MESSAGE_SEND, (payload, ack) => {
     void (async () => {
       try {
+        // BUILD.md Phase 7: messages 30/min/user. No REST equivalent for
+        // this event, so it's enforced here rather than as Express
+        // middleware — same fail-open-on-Redis-error behaviour either way.
+        const rateLimit = await checkRateLimit(messageRateLimiter, userId);
+        if (rateLimit.limited) {
+          ack({
+            ok: false,
+            code: ErrorCode.RATE_LIMITED,
+            message: 'Too many messages. Please slow down.',
+            retryAfterSeconds: rateLimit.retryAfterSeconds,
+          });
+          return;
+        }
+
         const input = sendMessageSchema.parse(payload);
         const result = await sendMessage(
           input.conversationId,

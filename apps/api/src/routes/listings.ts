@@ -3,18 +3,21 @@ import {
   attributesSchemaByCategory,
   confirmSaleRequestSchema,
   createListingSchema,
+  createReportRequestSchema,
   ErrorCode,
   FEED_PAGE_SIZE,
   listFeedQuerySchema,
   MAX_IMAGES_PER_LISTING,
   removeImageRequestSchema,
   reorderImagesRequestSchema,
+  REPORT_HIDE_THRESHOLD,
   RESERVATION_TTL_MS,
   SEARCH_MAX_PAGES,
   updateListingSchema,
   type FeedResponse,
   type Listing as ListingDto,
   type ListingDetailResponse,
+  type ReportResponse,
 } from '@campuskart/shared';
 import { Router, type Router as RouterType } from 'express';
 import { Types } from 'mongoose';
@@ -23,11 +26,18 @@ import { destroyAsset } from '../lib/cloudinary.js';
 import { decodeCursor, encodeCursor } from '../lib/cursor.js';
 import { bumpFeedVersion, getCachedFeedPage, setCachedFeedPage } from '../lib/feedCache.js';
 import { logger } from '../lib/logger.js';
+import { isDuplicateKeyError } from '../lib/mongoErrors.js';
+import {
+  listingCreateRateLimiter,
+  rateLimitMiddleware,
+  reportRateLimiter,
+} from '../lib/rateLimit.js';
 import { thumbnailQueue } from '../lib/thumbnailQueue.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { optionalAuth } from '../middleware/optionalAuth.js';
 import { getAuthUser, requireAuth } from '../middleware/requireAuth.js';
 import { Listing, type ListingDocument } from '../models/Listing.js';
+import { Report } from '../models/Report.js';
 import { User } from '../models/User.js';
 
 export const listingsRouter: RouterType = Router();
@@ -85,7 +95,13 @@ listingsRouter.get(
   asyncHandler(async (req, res) => {
     const query = listFeedQuerySchema.parse(req.query);
 
-    const baseFilter: Record<string, unknown> = { status: 'ACTIVE' };
+    // ARCHITECTURE.md §9: reportCount >= threshold auto-hides from the
+    // feed — not a status change, so a hidden listing is still ACTIVE,
+    // still owner-editable, and still reachable by direct id (GET /:id).
+    const baseFilter: Record<string, unknown> = {
+      status: 'ACTIVE',
+      reportCount: { $lt: REPORT_HIDE_THRESHOLD },
+    };
     if (query.category) baseFilter['category'] = query.category;
     if (query.condition) baseFilter['condition'] = query.condition;
     if (query.seller) baseFilter['sellerId'] = query.seller;
@@ -178,6 +194,8 @@ listingsRouter.get(
 listingsRouter.post(
   '/',
   requireAuth,
+  // BUILD.md Phase 7: listing creation 10/day/user.
+  rateLimitMiddleware(listingCreateRateLimiter, (req) => getAuthUser(req).sub),
   asyncHandler(async (req, res) => {
     const { sub: sellerId } = getAuthUser(req);
     const input = createListingSchema.parse(req.body);
@@ -642,5 +660,74 @@ listingsRouter.patch(
     }
 
     res.status(200).json(toPublicListing(updated));
+  }),
+);
+
+listingsRouter.post(
+  '/:id/report',
+  requireAuth,
+  // BUILD.md Phase 7: reports 20/day/user.
+  rateLimitMiddleware(reportRateLimiter, (req) => getAuthUser(req).sub),
+  asyncHandler(async (req, res) => {
+    const { sub: reporterId } = getAuthUser(req);
+    const { id } = req.params;
+    if (!id) {
+      throw new AppError(400, ErrorCode.BAD_REQUEST, 'Missing listing id');
+    }
+    const input = createReportRequestSchema.parse(req.body);
+
+    const listing = await Listing.findById(id).select('_id');
+    if (!listing) {
+      throw new AppError(404, ErrorCode.NOT_FOUND, 'Listing not found');
+    }
+
+    // Duplicate-report guard: the unique `{listingId, reporterId}` index on
+    // Report is the actual guarantee; this catch just turns the loser of a
+    // race (or a plain repeat report) into a 409 instead of a 500.
+    let report;
+    try {
+      report = await Report.create({
+        listingId: id,
+        reporterId,
+        reason: input.reason,
+        note: input.note ?? null,
+      });
+    } catch (err) {
+      if (isDuplicateKeyError(err)) {
+        throw new AppError(409, ErrorCode.CONFLICT, 'You have already reported this listing');
+      }
+      throw err;
+    }
+
+    // Two documents (Report, Listing), so this isn't one atomic operation —
+    // unlike the reservation state machine (ARCHITECTURE.md §4), nothing
+    // here needs single-document atomicity: the unique index above is what
+    // actually prevents double-counting, and a crash between these two
+    // writes just leaves one report's count uncredited, not a corrupted
+    // state. ARCHITECTURE.md deliberately avoids multi-document
+    // transactions elsewhere for the same reason (standalone dev Mongo has
+    // no replica set to run them on).
+    const updated = await Listing.findByIdAndUpdate(
+      id,
+      { $inc: { reportCount: 1 } },
+      { new: true },
+    ).select('reportCount status');
+
+    // Feed cache is keyed on filters, not reportCount, so any listing that
+    // just crossed the auto-hide threshold needs an explicit invalidation —
+    // the same reasoning as every other mutation that changes what the
+    // ACTIVE-only feed shows.
+    if (updated && updated.status === 'ACTIVE' && updated.reportCount >= REPORT_HIDE_THRESHOLD) {
+      await bumpFeedVersion();
+    }
+
+    const body: ReportResponse = {
+      id: report._id.toString(),
+      listingId: id,
+      reason: report.reason,
+      note: report.note ?? null,
+      createdAt: report.createdAt.toISOString(),
+    };
+    res.status(201).json(body);
   }),
 );
