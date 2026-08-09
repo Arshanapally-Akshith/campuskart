@@ -19,6 +19,7 @@ export const env = {
     .map((origin) => origin.trim()),
   mongoUri: required('MONGO_URI'),
   redisUrl: required('REDIS_URL'),
+  jwtSecret: required('JWT_SECRET'),
 } as const;
 
 export const isProduction = env.nodeEnv === 'production';
