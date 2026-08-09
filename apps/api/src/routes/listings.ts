@@ -3,15 +3,22 @@ import {
   attributesSchemaByCategory,
   createListingSchema,
   ErrorCode,
+  FEED_PAGE_SIZE,
+  listFeedQuerySchema,
   MAX_IMAGES_PER_LISTING,
   removeImageRequestSchema,
   reorderImagesRequestSchema,
+  SEARCH_MAX_PAGES,
   updateListingSchema,
+  type FeedResponse,
   type Listing as ListingDto,
 } from '@campuskart/shared';
 import { Router, type Router as RouterType } from 'express';
+import { Types } from 'mongoose';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { destroyAsset } from '../lib/cloudinary.js';
+import { decodeCursor, encodeCursor } from '../lib/cursor.js';
+import { bumpFeedVersion, getCachedFeedPage, setCachedFeedPage } from '../lib/feedCache.js';
 import { logger } from '../lib/logger.js';
 import { thumbnailQueue } from '../lib/thumbnailQueue.js';
 import { AppError } from '../middleware/errorHandler.js';
@@ -54,6 +61,101 @@ function toPublicListing(doc: ListingDocument): ListingDto {
 function isOwner(doc: ListingDocument, actorId: string): boolean {
   return doc.sellerId.toString() === actorId;
 }
+
+listingsRouter.get(
+  '/',
+  asyncHandler(async (req, res) => {
+    const query = listFeedQuerySchema.parse(req.query);
+
+    const baseFilter: Record<string, unknown> = { status: 'ACTIVE' };
+    if (query.category) baseFilter['category'] = query.category;
+    if (query.condition) baseFilter['condition'] = query.condition;
+    if (query.seller) baseFilter['sellerId'] = query.seller;
+    if (query.minPrice !== undefined || query.maxPrice !== undefined) {
+      const priceFilter: Record<string, number> = {};
+      if (query.minPrice !== undefined) priceFilter['$gte'] = query.minPrice;
+      if (query.maxPrice !== undefined) priceFilter['$lte'] = query.maxPrice;
+      baseFilter['priceInPaise'] = priceFilter;
+    }
+
+    if (query.q) {
+      // Search mode: relevance sort, offset pagination, hard-capped at
+      // SEARCH_MAX_PAGES — see ARCHITECTURE.md §6 for why this can't share
+      // the cursor-pagination compound index the plain browse feed uses.
+      const page = query.page ?? 1;
+      const skip = (page - 1) * FEED_PAGE_SIZE;
+
+      const searchFilter = { ...baseFilter, $text: { $search: query.q } };
+      const docs = await Listing.find(searchFilter, { score: { $meta: 'textScore' } })
+        .sort({ score: { $meta: 'textScore' } })
+        .skip(skip)
+        .limit(FEED_PAGE_SIZE + 1);
+
+      const hasMore = docs.length > FEED_PAGE_SIZE && page < SEARCH_MAX_PAGES;
+      const pageDocs = docs.slice(0, FEED_PAGE_SIZE);
+
+      const body: FeedResponse = {
+        listings: pageDocs.map(toPublicListing),
+        hasMore,
+        nextCursor: null,
+        page,
+        totalPages: SEARCH_MAX_PAGES,
+      };
+      res.status(200).json(body);
+      return;
+    }
+
+    // Browse mode: cursor pagination — cacheable, unlike search.
+    const cursorParam = query.cursor ?? null;
+    const cacheFilters = {
+      category: query.category,
+      minPrice: query.minPrice,
+      maxPrice: query.maxPrice,
+      condition: query.condition,
+      seller: query.seller,
+    };
+
+    const cached = await getCachedFeedPage(cacheFilters, cursorParam);
+    if (cached) {
+      res.status(200).json(cached);
+      return;
+    }
+
+    const mongoFilter: Record<string, unknown> = { ...baseFilter };
+    if (cursorParam) {
+      const decoded = decodeCursor(cursorParam);
+      if (!decoded || !Types.ObjectId.isValid(decoded.i)) {
+        throw new AppError(400, ErrorCode.BAD_REQUEST, 'Invalid cursor');
+      }
+      // Watch (BUILD.md Phase 4): this must be a real Date, not the raw ISO
+      // string, or Mongo compares BSON dates against a string and silently
+      // returns wrong results instead of erroring.
+      const createdAtDate = new Date(decoded.c);
+      mongoFilter['$or'] = [
+        { createdAt: { $lt: createdAtDate } },
+        { createdAt: createdAtDate, _id: { $lt: new Types.ObjectId(decoded.i) } },
+      ];
+    }
+
+    const docs = await Listing.find(mongoFilter)
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(FEED_PAGE_SIZE + 1);
+
+    const hasMore = docs.length > FEED_PAGE_SIZE;
+    const pageDocs = docs.slice(0, FEED_PAGE_SIZE);
+    const last = pageDocs[pageDocs.length - 1];
+    const nextCursor = hasMore && last ? encodeCursor(last.createdAt, last._id.toString()) : null;
+
+    const body: FeedResponse = {
+      listings: pageDocs.map(toPublicListing),
+      hasMore,
+      nextCursor,
+    };
+
+    await setCachedFeedPage(cacheFilters, cursorParam, body);
+    res.status(200).json(body);
+  }),
+);
 
 listingsRouter.post(
   '/',
@@ -104,6 +206,7 @@ listingsRouter.post(
     if (!published) {
       throw new AppError(409, ErrorCode.CONFLICT, 'Listing is not in DRAFT status');
     }
+    await bumpFeedVersion(); // newly ACTIVE — the feed cache must stop serving stale pages
 
     res.status(200).json(toPublicListing(published));
   }),
@@ -200,6 +303,9 @@ listingsRouter.delete(
     );
     if (!removed) {
       throw new AppError(409, ErrorCode.CONFLICT, 'Listing already removed');
+    }
+    if (existing.status === 'ACTIVE') {
+      await bumpFeedVersion(); // was visible in the feed; must disappear immediately
     }
 
     res.status(200).json(toPublicListing(removed));

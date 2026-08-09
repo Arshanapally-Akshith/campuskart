@@ -1,59 +1,34 @@
-import { useState } from 'react';
+import { Navigate, Route, Routes } from 'react-router-dom';
+import { AppLayout } from './components/AppLayout';
+import { AuthGate } from './components/AuthGate';
 import { useAuth } from './context/AuthContext';
-import { Dashboard } from './components/Dashboard';
-import { LoginForm } from './components/LoginForm';
-import { SignupForm } from './components/SignupForm';
-import { VerifyOtpForm } from './components/VerifyOtpForm';
-
-type Screen = 'signup' | 'verify' | 'login';
+import { CreateListingPage } from './pages/CreateListingPage';
+import { FeedPage } from './pages/FeedPage';
+import { ListingDetailPage } from './pages/ListingDetailPage';
 
 export function App() {
   const { isAuthenticated, bootstrapping } = useAuth();
-  const [screen, setScreen] = useState<Screen>('signup');
-  const [pendingEmail, setPendingEmail] = useState('');
+
+  if (bootstrapping) {
+    return (
+      <main className="flex min-h-screen items-center justify-center">
+        <p className="text-sm text-slate-500">Loading session…</p>
+      </main>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <AuthGate />;
+  }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col items-center justify-center gap-6 p-6">
-      <div className="text-center">
-        <h1 className="text-3xl font-bold text-slate-900">CampusKart</h1>
-        <p className="text-slate-600">Phase 2 — listings.</p>
-      </div>
-
-      {bootstrapping ? (
-        <p className="text-sm text-slate-500">Loading session…</p>
-      ) : isAuthenticated ? (
-        <Dashboard />
-      ) : (
-        <div className="w-full rounded-lg border border-slate-200 bg-white p-5">
-          {screen === 'signup' && (
-            <SignupForm
-              onSignedUp={(email) => {
-                setPendingEmail(email);
-                setScreen('verify');
-              }}
-              onSwitchToLogin={() => {
-                setScreen('login');
-              }}
-            />
-          )}
-          {screen === 'verify' && (
-            <VerifyOtpForm
-              email={pendingEmail}
-              onVerified={() => {
-                setScreen('login');
-              }}
-            />
-          )}
-          {screen === 'login' && (
-            <LoginForm
-              initialEmail={pendingEmail}
-              onSwitchToSignup={() => {
-                setScreen('signup');
-              }}
-            />
-          )}
-        </div>
-      )}
-    </main>
+    <Routes>
+      <Route element={<AppLayout />}>
+        <Route path="/" element={<FeedPage />} />
+        <Route path="/listings/:id" element={<ListingDetailPage />} />
+        <Route path="/create" element={<CreateListingPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
+    </Routes>
   );
 }
