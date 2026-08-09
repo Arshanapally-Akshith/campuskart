@@ -1,11 +1,22 @@
+import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { getConversations } from '../lib/chatApi';
 import { HealthStatus } from './HealthStatus';
 
 export function AppLayout() {
   const { user, logout } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
+
+  // Shares its cache (and the socket-driven invalidation in ChatProvider)
+  // with ConversationsList — this is not a second, independent poll.
+  const { data: conversations } = useQuery({
+    queryKey: ['conversations'],
+    queryFn: getConversations,
+    refetchInterval: 15_000,
+  });
+  const unreadTotal = conversations?.reduce((sum, c) => sum + c.unreadCount, 0) ?? 0;
 
   async function handleLogout(): Promise<void> {
     setLoggingOut(true);
@@ -32,6 +43,17 @@ export function AppLayout() {
           </span>
           <Link to="/create" className="rounded-lg bg-slate-900 px-3 py-1.5 font-medium text-white">
             Create a listing
+          </Link>
+          <Link
+            to="/conversations"
+            className="relative rounded-lg border border-slate-300 px-3 py-1.5 font-medium text-slate-700"
+          >
+            Messages
+            {unreadTotal > 0 && (
+              <span className="absolute -right-2 -top-2 rounded-full bg-blue-600 px-1.5 py-0.5 text-xs font-semibold text-white">
+                {unreadTotal}
+              </span>
+            )}
           </Link>
           <button
             type="button"

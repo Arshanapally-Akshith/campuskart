@@ -1,8 +1,10 @@
 import { formatPaise, type Listing, type ListingDetailResponse } from '@campuskart/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getErrorMessage } from '../lib/apiError';
+import { createConversation } from '../lib/chatApi';
 import { deleteListing, getListing, publishListing } from '../lib/listingsApi';
 import { ListingForm } from './ListingForm';
 import { ListingImages } from './ListingImages';
@@ -28,10 +30,25 @@ const STATUS_STYLES: Record<string, string> = {
 export function ListingDetail({ listingId, onBack }: ListingDetailProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const queryKey = ['listing', listingId];
   const [editing, setEditing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [messaging, setMessaging] = useState(false);
+
+  async function handleMessageSeller(): Promise<void> {
+    setActionError(null);
+    setMessaging(true);
+    try {
+      const conversation = await createConversation(listingId);
+      void navigate(`/conversations/${conversation.id}`);
+    } catch (err) {
+      setActionError(getErrorMessage(err));
+    } finally {
+      setMessaging(false);
+    }
+  }
 
   const {
     data: listing,
@@ -170,6 +187,19 @@ export function ListingDetail({ listingId, onBack }: ListingDetailProps) {
             onRefresh={() => void refetch()}
           />
         )}
+
+      {user && !isOwner && listing.status !== 'DRAFT' && listing.status !== 'REMOVED' && (
+        <div className="border-t border-slate-200 pt-3">
+          <button
+            type="button"
+            onClick={() => void handleMessageSeller()}
+            disabled={messaging}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+          >
+            {messaging ? 'Opening chat…' : 'Message seller'}
+          </button>
+        </div>
+      )}
 
       {isOwner && listing.status !== 'REMOVED' && (
         <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-3">

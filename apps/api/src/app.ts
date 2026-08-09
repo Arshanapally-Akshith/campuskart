@@ -8,6 +8,7 @@ import { env } from './config/env.js';
 import { logger } from './lib/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { authRouter } from './routes/auth.js';
+import { conversationsRouter } from './routes/conversations.js';
 import { healthRouter } from './routes/health.js';
 import { listingsRouter } from './routes/listings.js';
 import { uploadsRouter } from './routes/uploads.js';
@@ -41,6 +42,7 @@ export function createApp(): Express {
   app.use('/api/auth', authRouter);
   app.use('/api/listings', listingsRouter);
   app.use('/api/uploads', uploadsRouter);
+  app.use('/api/conversations', conversationsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

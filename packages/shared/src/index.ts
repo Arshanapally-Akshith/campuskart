@@ -1,4 +1,5 @@
 export * from './auth.js';
+export * from './chat.js';
 export * from './errors.js';
 export * from './feed.js';
 export * from './health.js';
