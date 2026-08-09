@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# BUILD.md Phase 8 "Do": "CI runs the whole suite." A fuller prod-deploy
+# pipeline (Docker image, branch protection, Sentry, etc.) is Phase 10 —
+# this workflow's job is just lint → typecheck → test (incl. coverage
+# thresholds) → build, so a red run here means the same command would have
+# been red on a clean local clone.
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    # apps/api's test suite (see apps/api/tests/setup.ts) needs a real
+    # Redis — OTP storage, rate limiting, the feed cache, and the Socket.IO
+    # Redis adapter are all exercised against it, not a mock. Mongo doesn't
+    # need a service: mongodb-memory-server spins up its own per test file.
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.20.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      # apps/api/vitest.config.ts pins MONGOMS_DOWNLOAD_DIR to this exact
+      # path (relative to the repo root) so the ~100MB+ binary download is
+      # shared across every test file's worker process in one run; caching
+      # it here shares it across CI runs too.
+      - name: Cache mongodb-memory-server binary
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/mongodb-memory-server
+          key: mongodb-memory-server-${{ runner.os }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package
+        run: pnpm --filter @campuskart/shared run build
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Test — API (with coverage thresholds)
+        run: pnpm --filter @campuskart/api run test:coverage
+
+      - name: Test — shared
+        run: pnpm --filter @campuskart/shared run test
+
+      - name: Test — web
+        run: pnpm --filter @campuskart/web run test
+
+      - name: Build
+        run: pnpm run build

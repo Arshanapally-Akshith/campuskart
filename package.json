@@ -16,6 +16,7 @@
     "format:check": "prettier --check .",
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
+    "test:coverage": "pnpm --filter @campuskart/api run test:coverage",
     "seed": "pnpm --filter @campuskart/shared run build && pnpm --filter @campuskart/api run seed",
     "prepare": "husky"
   },

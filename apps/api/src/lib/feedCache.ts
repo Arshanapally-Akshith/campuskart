@@ -1,9 +1,23 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { FeedResponse } from '@campuskart/shared';
+import { env } from '../config/env.js';
 import { redis } from './redis.js';
 
 const FEED_CACHE_TTL_SECONDS = 60;
-const VERSION_KEY = 'feed:version';
+
+// Redis is one real, shared instance across every concurrently-running test
+// *file* (each a separate vitest worker process — see tests/setup.ts). With
+// a single global `feed:version` key, one file bumping the version (any
+// publish/reserve/cancel/confirm-sale/delete/report-threshold in another
+// file) invalidates a cache entry a *different* file was mid-assertion on,
+// and two files can even collide on the exact same `feed:v{n}:{filterHash}`
+// key if their filters happen to hash the same way — both were observed as
+// the "cached page returns the wrong count" flake. A random namespace
+// generated once per process is a no-op in dev/prod (NODE_ENV isn't
+// 'test', so this is always `''`, i.e. the original key shape) and gives
+// every test file an isolated slice of the same Redis instance.
+const NAMESPACE = env.nodeEnv === 'test' ? `${randomUUID()}:` : '';
+const VERSION_KEY = `feed:${NAMESPACE}version`;
 
 export interface FeedFilterKey {
   category?: string | undefined;
@@ -36,7 +50,7 @@ export async function bumpFeedVersion(): Promise<void> {
 }
 
 function cacheKey(version: string, filterHash: string, slot: 'p1' | 'p2'): string {
-  return `feed:v${version}:${filterHash}:${slot}`;
+  return `feed:${NAMESPACE}v${version}:${filterHash}:${slot}`;
 }
 
 /**

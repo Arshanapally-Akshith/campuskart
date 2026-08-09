@@ -16,6 +16,35 @@ export default defineConfig({
     hookTimeout: 120_000,
     testTimeout: 15_000,
     setupFiles: ['./tests/setup.ts'],
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.ts'],
+      exclude: [
+        'src/types/**',
+        // Process entrypoints: wire together already-independently-tested
+        // pieces (createApp, createSocketServer, worker queues) behind
+        // `main()`/`process.on(...)`/`process.exit(...)` — there is no
+        // meaningful assertion to make against "the process started" that
+        // isn't already covered by exercising those pieces directly.
+        'src/index.ts',
+        'src/worker.ts',
+      ],
+      reporter: ['text', 'html', 'json-summary'],
+      // BUILD.md Phase 8: "Coverage on apps/api/src ≥ 70%, and 100% on the
+      // reservation module specifically."
+      thresholds: {
+        lines: 70,
+        statements: 70,
+        functions: 70,
+        branches: 70,
+        'src/lib/reservationService.ts': {
+          lines: 100,
+          statements: 100,
+          functions: 100,
+          branches: 100,
+        },
+      },
+    },
     env: {
       NODE_ENV: 'test',
       JWT_SECRET: 'test-only-secret-do-not-use-in-production',

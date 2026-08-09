@@ -15,6 +15,18 @@ let mongod: MongoMemoryServer;
 beforeAll(async () => {
   mongod = await MongoMemoryServer.create();
   await mongoose.connect(mongod.getUri());
+
+  // Mongoose builds indexes (including text indexes) asynchronously in the
+  // background after a model first connects. Against a long-lived dev/prod
+  // Mongo that's a one-time cost that's long since finished by the time
+  // real traffic arrives; against a brand-new mongodb-memory-server
+  // database created fresh for *every test file*, a query can race ahead
+  // of its own index still being built — the concrete symptom seen here was
+  // an intermittent "text index required for $text query" on the very
+  // first $text query of a file. `Model.init()` returns the same
+  // (idempotent) promise Mongoose already kicked off, so this just makes
+  // sure every test in this file waits for it.
+  await Promise.all(Object.values(mongoose.models).map((model) => model.init()));
 });
 
 afterEach(async () => {
