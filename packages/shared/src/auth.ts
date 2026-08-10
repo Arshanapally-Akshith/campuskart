@@ -1,9 +1,26 @@
-/** Signup is gated to this domain — see ARCHITECTURE.md §8. */
-export const NITW_EMAIL_REGEX = /^[^\s@]+@student\.nitw\.ac\.in$/i;
+/**
+ * Basic format sanity check, not a domain gate — signup previously
+ * restricted to @student.nitw.ac.in (see ARCHITECTURE.md §8); that
+ * restriction was lifted so a recruiter/anyone can sign up for a public
+ * demo deployment. Still worth rejecting obviously-malformed input before
+ * it reaches the DB.
+ */
+export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function isNitwEmail(email: string): boolean {
-  return NITW_EMAIL_REGEX.test(email);
+export function isValidEmail(email: string): boolean {
+  return EMAIL_REGEX.test(email);
 }
+
+/**
+ * A single public, pre-seeded account (see apps/api/scripts/seedDemo.ts)
+ * so a recruiter can explore CampusKart with one click — no real email, no
+ * OTP. Intentionally not a secret: these are exported for the frontend's
+ * "Try Demo" button to use directly, exactly like the credentials printed
+ * on the login screen of any public demo app. Never reuse this password
+ * for anything that isn't this specific seeded account.
+ */
+export const DEMO_ACCOUNT_EMAIL = 'demo@campuskart.dev';
+export const DEMO_ACCOUNT_PASSWORD = 'CampusKartDemo@2026';
 
 export interface AuthUser {
   id: string;

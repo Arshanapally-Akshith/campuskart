@@ -139,6 +139,32 @@ Then from a browser against the Vercel URL: sign up, verify OTP, log in,
 refresh the page (confirms the refresh cookie survives), create a listing
 with an image, open a chat — the standard smoke path.
 
+## 7. One-time step: seeding the demo account
+
+The "Try Demo" button on the login screen logs in as a single pre-seeded,
+pre-verified account (email/password in `packages/shared/src/auth.ts`'s
+`DEMO_ACCOUNT_EMAIL`/`DEMO_ACCOUNT_PASSWORD` — intentionally public, not a
+secret) so a recruiter never needs a real email or OTP. That account has to
+actually exist in whichever Mongo the deployed API points at, and
+`scripts/seed.ts`/`scripts/seed:load` refuse to run under
+`NODE_ENV=production` (they wipe the whole DB — not something you want
+against a live deploy). `scripts/seedDemo.ts` is the one exception: it
+never deletes anything, is safe to re-run, and is **not** blocked in
+production. Run it once, from anywhere with network access to the deployed
+Mongo (a local machine pointed at the Atlas URI is easiest):
+
+```bash
+MONGO_URI="<your Atlas URI>" REDIS_URL="<your Upstash URI>" \
+CORS_ORIGIN="https://<your-vercel-url>" JWT_SECRET="<anything>" \
+pnpm run seed:demo
+```
+
+(The other required env vars just need to be _present_ to satisfy
+`apps/api/src/config/env.ts`'s startup validation — this script never
+touches Redis, CORS, or JWTs, only Mongo.) Re-running it is harmless: it
+re-confirms the demo user's credentials every time and only creates the
+sample listings/conversation once.
+
 ## What this Dockerfile build revealed (fixed, not just documented)
 
 - `package.json` pins `packageManager: pnpm@11.20.0`, which requires

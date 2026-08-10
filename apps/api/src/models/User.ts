@@ -1,5 +1,5 @@
 import { Schema, model, type HydratedDocument, type InferSchemaType } from 'mongoose';
-import { NITW_EMAIL_REGEX } from '@campuskart/shared';
+import { EMAIL_REGEX } from '@campuskart/shared';
 
 const userSchema = new Schema(
   {
@@ -9,7 +9,7 @@ const userSchema = new Schema(
       unique: true,
       lowercase: true,
       trim: true,
-      match: NITW_EMAIL_REGEX,
+      match: EMAIL_REGEX,
     },
     emailVerifiedAt: { type: Date, default: null },
     passwordHash: { type: String, required: true },

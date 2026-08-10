@@ -17,17 +17,30 @@ function errorOf(res: request.Response): ErrorPayload['error'] {
 }
 
 describe('auth flow', () => {
-  it('rejects signup for a non-NITW email', async () => {
+  it('accepts signup for a non-NITW email (domain restriction was lifted for the public demo)', async () => {
     const app = buildApp();
     // A fresh email per run, not a fixed literal: BUILD.md Phase 7's OTP
-    // rate limiter (3/hour/email) is keyed on the email in the request body
-    // regardless of whether the handler later rejects it as invalid, so a
-    // hardcoded address here would eventually start getting 429 instead of
-    // 400 across repeated suite runs against the same real Redis instance.
+    // rate limiter (3/hour/email) is keyed on the email in the request body,
+    // so a hardcoded address here would eventually start getting 429 across
+    // repeated suite runs against the same real Redis instance.
     const res = await request(app)
       .post('/api/auth/signup')
       .send({
         email: `someone-${randomUUID()}@gmail.com`,
+        password: TEST_PASSWORD,
+        name: 'Someone',
+      })
+      .expect(201);
+
+    expect(res.body).toMatchObject({ otpSent: true });
+  });
+
+  it('rejects signup for a malformed email', async () => {
+    const app = buildApp();
+    const res = await request(app)
+      .post('/api/auth/signup')
+      .send({
+        email: `not-an-email-${randomUUID()}`,
         password: TEST_PASSWORD,
         name: 'Someone',
       })

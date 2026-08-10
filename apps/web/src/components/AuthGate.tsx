@@ -5,9 +5,11 @@ import { VerifyOtpForm } from './VerifyOtpForm';
 
 type Screen = 'signup' | 'verify' | 'login';
 
-/** Signup / OTP verify / login flow shown whenever there is no session. */
+/** Signup / OTP verify / login flow shown whenever there is no session.
+ * Defaults to the login screen (not signup) so the "Try Demo" button is the
+ * first thing a first-time visitor sees. */
 export function AuthGate() {
-  const [screen, setScreen] = useState<Screen>('signup');
+  const [screen, setScreen] = useState<Screen>('login');
   const [pendingEmail, setPendingEmail] = useState('');
 
   return (

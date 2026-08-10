@@ -14,6 +14,7 @@
     "test:coverage": "pnpm --filter @campuskart/shared run build && vitest run --coverage",
     "seed": "tsx --env-file-if-exists=.env scripts/seed.ts",
     "seed:load": "tsx --env-file-if-exists=.env scripts/loadSeed.ts",
+    "seed:demo": "tsx --env-file-if-exists=.env scripts/seedDemo.ts",
     "perf:explain": "tsx --env-file-if-exists=.env scripts/explainIndexCheck.ts",
     "perf:cache-stats": "tsx --env-file-if-exists=.env scripts/cacheStats.ts",
     "perf:chat": "tsx --env-file-if-exists=.env scripts/chatThroughput.ts",

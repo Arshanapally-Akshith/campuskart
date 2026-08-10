@@ -1,4 +1,3 @@
-import { isNitwEmail } from '@campuskart/shared';
 import { useState, type FormEvent } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getErrorMessage } from '../lib/apiError';
@@ -19,12 +18,6 @@ export function SignupForm({ onSignedUp, onSwitchToLogin }: SignupFormProps) {
   async function handleSubmit(event: FormEvent): Promise<void> {
     event.preventDefault();
     setError(null);
-
-    if (!isNitwEmail(email)) {
-      setError('Use your @student.nitw.ac.in email address');
-      return;
-    }
-
     setSubmitting(true);
     try {
       await signup({ email, password, name });
@@ -51,7 +44,7 @@ export function SignupForm({ onSignedUp, onSwitchToLogin }: SignupFormProps) {
       />
       <input
         type="email"
-        placeholder="you@student.nitw.ac.in"
+        placeholder="Email"
         value={email}
         onChange={(event) => {
           setEmail(event.target.value);

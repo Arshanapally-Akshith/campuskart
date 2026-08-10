@@ -89,7 +89,7 @@ Two Node processes: `api` (HTTP + WS) and `worker` (BullMQ consumers). Same imag
 ```ts
 {
   _id: ObjectId,
-  email: string,              // must match /@student\.nitw\.ac\.in$/
+  email: string,              // basic format check only, see §8 — no longer domain-restricted
   emailVerifiedAt: Date | null,
   passwordHash: string,       // argon2id
   name: string,
@@ -364,7 +364,14 @@ Server-side re-validation in the worker is the security bit: a signed upload URL
 
 ## 8. Auth
 
-- **Signup** restricted to `@student.nitw.ac.in`. Domain check is the trust boundary that makes a campus marketplace work at all — it's product logic, not decoration.
+- **Signup** was originally restricted to `@student.nitw.ac.in` — the domain
+  check was the trust boundary that makes a campus marketplace work at all,
+  product logic rather than decoration. That gate was later lifted
+  (`packages/shared/src/auth.ts`) so anyone can sign up, specifically to
+  make this a public, recruiter-friendly portfolio deployment; see the
+  "Try Demo" one-click login on the login screen
+  (`apps/api/scripts/seedDemo.ts`) for the zero-friction path. Email is
+  still format-validated, just not domain-gated.
 - 6-digit OTP, hashed in Redis with 10-minute TTL, max 5 attempts.
 - **Access token**: JWT, 15 min, `Authorization: Bearer`, held in memory only (never `localStorage` — XSS reads it).
 - **Refresh token**: opaque 32-byte random, SHA-256 hashed at rest, httpOnly + Secure + SameSite=Lax cookie, 7 days.

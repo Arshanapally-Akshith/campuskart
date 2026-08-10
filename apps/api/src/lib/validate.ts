@@ -1,4 +1,4 @@
-import { ErrorCode, isNitwEmail } from '@campuskart/shared';
+import { ErrorCode, isValidEmail } from '@campuskart/shared';
 import { AppError } from '../middleware/errorHandler.js';
 
 export function requireString(body: unknown, field: string): string {
@@ -12,13 +12,9 @@ export function requireString(body: unknown, field: string): string {
   return value;
 }
 
-export function assertNitwEmail(email: string): void {
-  if (!isNitwEmail(email)) {
-    throw new AppError(
-      400,
-      ErrorCode.BAD_REQUEST,
-      'Signup is restricted to @student.nitw.ac.in addresses',
-    );
+export function assertValidEmail(email: string): void {
+  if (!isValidEmail(email)) {
+    throw new AppError(400, ErrorCode.BAD_REQUEST, 'Invalid email address');
   }
 }
 

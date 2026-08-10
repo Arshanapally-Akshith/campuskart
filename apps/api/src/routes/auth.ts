@@ -21,9 +21,9 @@ import { RefreshToken } from '../models/RefreshToken.js';
 import { User, type UserDocument } from '../models/User.js';
 import {
   assertNameLength,
-  assertNitwEmail,
   assertOtpFormat,
   assertPasswordStrength,
+  assertValidEmail,
   requireString,
 } from '../lib/validate.js';
 
@@ -100,7 +100,7 @@ authRouter.post(
     const password = requireString(req.body, 'password');
     const name = requireString(req.body, 'name').trim();
 
-    assertNitwEmail(email);
+    assertValidEmail(email);
     assertPasswordStrength(password);
     assertNameLength(name);
 
