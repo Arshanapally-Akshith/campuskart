@@ -60,25 +60,45 @@ function SearchBox({ initialValue, onCommit }: SearchBoxProps) {
   );
 }
 
+const CONDITION_STYLES: Record<Condition, string> = {
+  NEW: 'bg-emerald-50 text-emerald-700',
+  LIKE_NEW: 'bg-sky-50 text-sky-700',
+  GOOD: 'bg-amber-50 text-amber-700',
+  FAIR: 'bg-slate-100 text-slate-600',
+};
+
 function ListingCard({ listing }: { listing: ListingSummary }) {
   const thumb = listing.images[0]?.thumbUrl ?? null;
   return (
     <Link
       to={`/listings/${listing.id}`}
-      className="flex flex-col gap-1 rounded-lg border border-slate-200 p-2 transition hover:border-slate-400"
+      className="flex flex-col gap-2 overflow-hidden rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
     >
-      <div className="flex aspect-square items-center justify-center overflow-hidden rounded-md bg-slate-100">
+      <div className="flex aspect-square items-center justify-center overflow-hidden rounded-lg bg-slate-100">
         {thumb ? (
-          <img src={thumb} alt={listing.title} className="h-full w-full object-cover" />
+          <img
+            src={thumb}
+            alt={listing.title}
+            loading="lazy"
+            decoding="async"
+            className="h-full w-full object-cover"
+          />
         ) : (
           <span className="text-xs text-slate-400">No photo</span>
         )}
       </div>
-      <p className="truncate text-sm font-medium text-slate-900">{listing.title}</p>
-      <p className="text-sm font-bold text-slate-900">{formatPaise(listing.priceInPaise)}</p>
-      <p className="text-xs text-slate-500">
-        {listing.category} · {listing.condition}
-      </p>
+      <div className="flex flex-col gap-1">
+        <p className="truncate text-sm font-medium text-slate-900">{listing.title}</p>
+        <p className="text-base font-bold text-slate-900">{formatPaise(listing.priceInPaise)}</p>
+        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+          <span>{listing.category}</span>
+          <span
+            className={`rounded-full px-1.5 py-0.5 font-medium ${CONDITION_STYLES[listing.condition]}`}
+          >
+            {listing.condition.replace('_', ' ')}
+          </span>
+        </div>
+      </div>
     </Link>
   );
 }

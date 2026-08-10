@@ -10,6 +10,39 @@ function optional(name: string, fallback: string): string {
   return process.env[name] ?? fallback;
 }
 
+/**
+ * Splits a comma-separated CORS_ORIGIN value into normalized origins.
+ * `cors()` matches each incoming request's `Origin` header against this
+ * list with an exact string comparison — no header, no trailing slash, no
+ * quotes. Defensive against the paste mistakes a PaaS env-var dashboard
+ * (Render, etc.) actually produces, since it stores the value exactly as
+ * typed rather than interpreting shell-style quoting the way a `.env`
+ * loader does:
+ *   - surrounding whitespace around an entry,
+ *   - a literal wrapping `"..."`/`'...'` (someone copied a `.env`-style
+ *     `KEY="value"` line straight into the dashboard's value field), and
+ *   - a trailing slash (a browser's Origin header never has one — it's
+ *     scheme+host+port only — but a copy-pasted URL often does).
+ * A mismatch here is exactly what makes CORS failures hard to diagnose:
+ * `cors()` just silently omits the response header rather than erroring.
+ */
+export function parseCorsOrigins(raw: string): string[] {
+  return raw
+    .split(',')
+    .map((entry) => {
+      let value = entry.trim();
+      const isQuoted =
+        value.length >= 2 &&
+        ((value.startsWith('"') && value.endsWith('"')) ||
+          (value.startsWith("'") && value.endsWith("'")));
+      if (isQuoted) {
+        value = value.slice(1, -1).trim();
+      }
+      return value.replace(/\/+$/, '');
+    })
+    .filter((value) => value.length > 0);
+}
+
 type CookieSameSite = 'lax' | 'none' | 'strict';
 
 // Local dev has web (localhost:5173) and api (localhost:4000) on the same
@@ -31,9 +64,7 @@ export const env = {
   nodeEnv: optional('NODE_ENV', 'development'),
   port: Number(optional('PORT', '4000')),
   logLevel: optional('LOG_LEVEL', 'info'),
-  corsOrigins: required('CORS_ORIGIN')
-    .split(',')
-    .map((origin) => origin.trim()),
+  corsOrigins: parseCorsOrigins(required('CORS_ORIGIN')),
   cookieSameSite: cookieSameSite(),
   mongoUri: required('MONGO_URI'),
   redisUrl: required('REDIS_URL'),

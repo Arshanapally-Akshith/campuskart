@@ -112,7 +112,14 @@ up for that to work, both already wired:
 
 - **CORS**: `CORS_ORIGIN` must be the exact Vercel URL (`cors()` in
   `apps/api/src/app.ts` checks it with `credentials: true`, and the
-  Socket.IO server in `socketServer.ts` uses the same origin list).
+  Socket.IO server in `socketServer.ts` uses the same origin list). "Exact"
+  is strict — `cors()` does a plain string match against the browser's
+  `Origin` header, which never has a trailing slash. `apps/api/src/config/env.ts`'s
+  `parseCorsOrigins` tolerates a trailing slash, surrounding whitespace, and
+  a literal wrapping `"..."`/`'...'` (Render's dashboard stores env values
+  exactly as typed, quotes and all), but it can't fix a value that's
+  outright the wrong URL — e.g. a Vercel _preview_ deployment's per-build
+  URL instead of the stable production one.
 - **Refresh cookie `SameSite`**: the refresh-token cookie
   (`apps/api/src/routes/auth.ts`) was hardcoded `SameSite=Lax`, which a
   cross-site `fetch`/XHR never attaches — the browser only sends `Lax`
