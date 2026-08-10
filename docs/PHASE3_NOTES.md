@@ -11,11 +11,12 @@ CLOUDINARY_API_KEY=...
 CLOUDINARY_API_SECRET=...
 ```
 
-Without real values the server still starts and `/api/uploads/sign` still
-returns a syntactically valid, correctly-computed signature (signing is a
-pure local computation — see below), but the browser's direct upload to
-Cloudinary, and the worker's fetch-original / re-upload-thumbnail calls,
-will fail against a real account.
+Cloudinary is optional (Phase 10): without any of the three vars set, the
+server and worker still start normally, and every call that would actually
+need Cloudinary (`/api/uploads/sign`, thumbnail generation, orphan cleanup)
+fails fast with a `503 SERVICE_UNAVAILABLE` instead of a signature that
+looks valid but can't actually upload anywhere — see
+`apps/api/src/lib/cloudinary.ts`'s `assertCloudinaryConfigured`.
 
 ## What was verified, and how, given no live Cloudinary account
 

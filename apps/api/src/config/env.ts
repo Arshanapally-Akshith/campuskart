@@ -38,9 +38,16 @@ export const env = {
   mongoUri: required('MONGO_URI'),
   redisUrl: required('REDIS_URL'),
   jwtSecret: required('JWT_SECRET'),
-  cloudinaryCloudName: required('CLOUDINARY_CLOUD_NAME'),
-  cloudinaryApiKey: required('CLOUDINARY_API_KEY'),
-  cloudinaryApiSecret: required('CLOUDINARY_API_SECRET'),
+  // Optional: Cloudinary is only needed for the image pipeline. Leaving
+  // these unset lets the API/worker start normally; anything that actually
+  // needs Cloudinary fails with a clear 503 at the point of use instead —
+  // see isCloudinaryConfigured and lib/cloudinary.ts.
+  cloudinaryCloudName: optional('CLOUDINARY_CLOUD_NAME', ''),
+  cloudinaryApiKey: optional('CLOUDINARY_API_KEY', ''),
+  cloudinaryApiSecret: optional('CLOUDINARY_API_SECRET', ''),
 } as const;
 
 export const isProduction = env.nodeEnv === 'production';
+
+export const isCloudinaryConfigured =
+  env.cloudinaryCloudName !== '' && env.cloudinaryApiKey !== '' && env.cloudinaryApiSecret !== '';

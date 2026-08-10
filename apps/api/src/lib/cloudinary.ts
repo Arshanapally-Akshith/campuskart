@@ -1,15 +1,35 @@
 import { v2 as cloudinary } from 'cloudinary';
-import { env } from '../config/env.js';
+import { ErrorCode } from '@campuskart/shared';
+import { env, isCloudinaryConfigured } from '../config/env.js';
+import { AppError } from '../middleware/errorHandler.js';
 
-cloudinary.config({
-  cloud_name: env.cloudinaryCloudName,
-  api_key: env.cloudinaryApiKey,
-  api_secret: env.cloudinaryApiSecret,
-  secure: true,
-});
+if (isCloudinaryConfigured) {
+  cloudinary.config({
+    cloud_name: env.cloudinaryCloudName,
+    api_key: env.cloudinaryApiKey,
+    api_secret: env.cloudinaryApiSecret,
+    secure: true,
+  });
+}
+
+/** Every exported call below that actually touches Cloudinary (signing or
+ * the Admin/Upload API) goes through this first, so a deploy without
+ * Cloudinary credentials fails with one clear, consistent error at the
+ * point of use instead of a confusing SDK error deep in a third-party
+ * client. */
+function assertCloudinaryConfigured(): void {
+  if (!isCloudinaryConfigured) {
+    throw new AppError(
+      503,
+      ErrorCode.SERVICE_UNAVAILABLE,
+      'Image uploads are not configured on this server',
+    );
+  }
+}
 
 /** Pure/local — Cloudinary's documented signing algorithm, no network call. */
 export function signUploadParams(params: Record<string, string | number>): string {
+  assertCloudinaryConfigured();
   return cloudinary.utils.api_sign_request(params, env.cloudinaryApiSecret);
 }
 
@@ -23,6 +43,7 @@ export async function fetchImageBuffer(url: string): Promise<Buffer> {
 }
 
 export async function uploadThumbnail(buffer: Buffer, publicId: string): Promise<string> {
+  assertCloudinaryConfigured();
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
       { public_id: publicId, overwrite: true, resource_type: 'image' },
@@ -39,6 +60,7 @@ export async function uploadThumbnail(buffer: Buffer, publicId: string): Promise
 }
 
 export async function destroyAsset(publicId: string): Promise<void> {
+  assertCloudinaryConfigured();
   await cloudinary.uploader.destroy(publicId);
 }
 
@@ -58,6 +80,7 @@ export async function listResourcesByPrefix(
   prefix: string,
   cursor: string | null,
 ): Promise<ResourcesPage> {
+  assertCloudinaryConfigured();
   const result = (await cloudinary.api.resources({
     type: 'upload',
     prefix,
@@ -80,5 +103,6 @@ export async function listResourcesByPrefix(
 
 export async function destroyAssets(publicIds: string[]): Promise<void> {
   if (publicIds.length === 0) return;
+  assertCloudinaryConfigured();
   await cloudinary.api.delete_resources(publicIds);
 }

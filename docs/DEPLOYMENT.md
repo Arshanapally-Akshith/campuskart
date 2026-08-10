@@ -63,13 +63,19 @@ variables (below) except `PORT`, which only `api` uses.
 | `MONGO_URI`             | The Atlas SRV URI from §1                                                                                                                                  |
 | `REDIS_URL`             | The Upstash `rediss://` URI from §2                                                                                                                        |
 | `JWT_SECRET`            | A freshly generated secret — **do not reuse the dev one**: `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`                |
-| `CLOUDINARY_CLOUD_NAME` | From your Cloudinary dashboard (console.cloudinary.com)                                                                                                    |
-| `CLOUDINARY_API_KEY`    | ″                                                                                                                                                          |
-| `CLOUDINARY_API_SECRET` | ″                                                                                                                                                          |
+| `CLOUDINARY_CLOUD_NAME` | Optional — from your Cloudinary dashboard (console.cloudinary.com). See below.                                                                             |
+| `CLOUDINARY_API_KEY`    | Optional, ″                                                                                                                                                |
+| `CLOUDINARY_API_SECRET` | Optional, ″                                                                                                                                                |
 
-`apps/api/src/config/env.ts` throws at startup if any required var is
+`apps/api/src/config/env.ts` throws at startup if any _required_ var is
 missing, so a misconfigured deploy fails fast and loud rather than serving
-broken requests.
+broken requests. Cloudinary is the one exception: the three `CLOUDINARY_*`
+vars are optional (`apps/api/src/config/env.ts`'s `isCloudinaryConfigured`).
+Leave them unset to deploy without the image pipeline — the API and worker
+both start normally, and `/api/uploads/sign`, thumbnail generation, and the
+orphan-cleanup job all fail with a clear `503 SERVICE_UNAVAILABLE` instead
+of a broken/silently-useless upload flow (`apps/api/src/lib/cloudinary.ts`).
+Set all three to enable it.
 
 ### Health check
 
