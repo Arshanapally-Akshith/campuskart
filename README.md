@@ -51,3 +51,9 @@ verifies and thumbnails on the way in. Needs real Cloudinary credentials in
 `apps/api/.env` to actually upload — see [docs/PHASE3_NOTES.md](./docs/PHASE3_NOTES.md)
 for setup, what's verified without live credentials, and the orphaned-asset
 cleanup job.
+
+## Deployment (Phase 10)
+
+Production Dockerfile for the API/worker, MongoDB Atlas, Upstash Redis, and
+Vercel for the web app — see [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) for
+the full setup and environment variables.

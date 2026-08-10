@@ -1,6 +1,7 @@
 import { Router, type Router as RouterType, type Request, type Response } from 'express';
 import { ErrorCode, type AuthUser, type LoginResponse, type MeResponse } from '@campuskart/shared';
 import type { RefreshResponse, SignupResponse, VerifyOtpResponse } from '@campuskart/shared';
+import { env } from '../config/env.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { signAccessToken } from '../lib/jwt.js';
 import { sendOtpEmail } from '../lib/mailer.js';
@@ -31,7 +32,7 @@ export const authRouter: RouterType = Router();
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
   secure: true,
-  sameSite: 'lax' as const,
+  sameSite: env.cookieSameSite,
   path: '/api/auth',
 };
 

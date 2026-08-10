@@ -5,11 +5,11 @@ on:
     branches: [main]
   pull_request:
 
-# BUILD.md Phase 8 "Do": "CI runs the whole suite." A fuller prod-deploy
-# pipeline (Docker image, branch protection, Sentry, etc.) is Phase 10 —
-# this workflow's job is just lint → typecheck → test (incl. coverage
-# thresholds) → build, so a red run here means the same command would have
-# been red on a clean local clone.
+# BUILD.md Phase 8 "Do": "CI runs the whole suite." This workflow's job is
+# lint → typecheck → test (incl. coverage thresholds) → build → confirm the
+# prod Docker image still builds, so a red run here means the same commands
+# would have been red on a clean local clone. Deploying that image, branch
+# protection, and error tracking are manual/hosting-side setup, not CI.
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -77,3 +77,6 @@ jobs:
 
       - name: Build
         run: pnpm run build
+
+      - name: Build API Docker image
+        run: docker build -f apps/api/Dockerfile -t campuskart-api:ci .
