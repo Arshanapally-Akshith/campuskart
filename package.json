@@ -10,7 +10,9 @@
   "scripts": {
     "dev": "pnpm --filter @campuskart/shared run build && concurrently -n api,worker,web -c blue,magenta,green \"pnpm --filter @campuskart/api run dev\" \"pnpm --filter @campuskart/api run worker\" \"pnpm --filter @campuskart/web run dev\"",
     "build": "pnpm -r run build",
+    "prelint": "pnpm --filter @campuskart/shared run build",
     "lint": "eslint .",
+    "prelint:fix": "pnpm --filter @campuskart/shared run build",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
