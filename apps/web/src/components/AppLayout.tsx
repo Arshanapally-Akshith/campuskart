@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { Link, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getConversations } from '../lib/chatApi';
-import { HealthStatus } from './HealthStatus';
 
 export function AppLayout() {
   const { user, logout } = useAuth();
@@ -69,10 +68,6 @@ export function AppLayout() {
       <main className="flex-1">
         <Outlet />
       </main>
-
-      <footer className="border-t border-slate-200 pt-3">
-        <HealthStatus />
-      </footer>
     </div>
   );
 }
